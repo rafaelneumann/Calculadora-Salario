@@ -1,0 +1,472 @@
+<!doctype html>
+<html>
+	<head>
+		<meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+		<title>Salário líquido</title>
+		<style type="text/css">
+			body {
+				width: 850px;
+				margin-left: auto;
+				margin-right: auto;
+				margin-top: 20px;
+				font-family: "Lucida Sans Unicode";
+				font-size: 20px;
+				text-align: center;
+			}
+			table {
+				margin-top: 10px;
+				border-spacing: 5px;
+			}
+			input {
+				font-size: 90%;
+				float: left;
+			}
+			input[type=text] {
+				border: none;
+				border-bottom: 1px dashed;
+				outline: none;
+			}
+			input[type=text]:focus {
+				border-bottom: 1px dashed;
+				overflow: hidden;
+			}
+			input[type=checkbox] {
+				margin-top: 9px;
+			}
+			#resultados {
+				text-align: right;
+				margin-left: 3px;
+			}
+			#floatingDiv {
+				display: none;
+				font-size: 70%;
+			}
+			#floatingP {
+				background-color: #C3E7BB;
+				border: 1px solid #000000;
+			}
+			#floatingP:hover {
+				background-color: #C3FFBB;
+				border: 1px solid #000000;
+			}
+			#question {
+				position: absolute;
+				top: 10px;
+				right: 10px;
+				padding: 5px;
+			}
+			#question:hover {
+				background-color: #AAA;
+				color: #FFF;
+			}
+			#userInfo {
+				color: #1a4c33;
+			}
+			#userInfo:hover {
+				color: #1a5cF3;
+			}
+			#wrapper {
+				padding: 0px, 0px, 0px, 0px;
+				display: inline;
+			}
+			#left_info {
+				float: left;
+				padding-top: 30px;
+				width: 40%;
+				padding: 0px, 0px, 0px, 0px;
+			}
+			#chart_div_donut {
+				float: right;
+				width: 60%;
+				height: 300px;
+				padding: 0px, 0px, 0px, 0px;
+			}
+			#salarioLiquido {
+				font-weight: bold;
+			}
+			.res {
+				text-align: right;
+				font-size: 80%;
+			}
+			.b {
+				font-weight: bold;
+			}
+			.tdRight {
+				text-align: right;
+			}
+			#aviso2017 {
+				color: #2B5302;
+				font-weight:bold;
+			}
+			#anoINSS {
+				margin-left: 10px;
+			}
+		</style>
+		<script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+		<script type="text/javascript">
+			// Inicializa o google charts, para criar o "donut chart" (funcção drawChart)
+			google.charts.load("current", {packages:["corechart"]});
+
+			// Arrays com os valores dos alíquotas de impostos de 2015 a partir de abril (pelo valor limite de cada alíquota / pelo teto)
+			var imposto = new Array(190398, 282665, 375105, 466468);
+			var impostoDeduzir = new Array(0, 14280, 35480, 63613, 86936);
+
+			// Arrays com os valores das alíquotas e faixas do INSS
+			var valoresINSS2015 = new Array(139912, 233188, 466375); // 2015
+			var valoresINSS2016 = new Array(155694, 259492, 518982); // janeiro de 2016
+			var valoresINSS2017 = new Array(165938, 276566, 553131); // janeiro de 2017
+			var valoresINSS = {'2015' : valoresINSS2015,
+					'2016' : valoresINSS2016,
+					'2017' : valoresINSS2017};
+			var aliquotasINSS = new Array(0.08, 0.09, 0.11);
+
+			// Função padrão do Google
+			function drawChart(a, b, c, d) {
+				var data = google.visualization.arrayToDataTable([
+					['Composição', 'Reais'],
+					['Salário líquido', a],
+					['IRPF', b],
+					['Previdência', c],
+					['Facultativos', d]]);
+
+					var options = {
+						title: 'Composição salarial',
+						pieHole: 0.3,
+						slices: {
+							0: { color: '#2B5302' },
+							1: { color: '#797A17' },
+							2: { color: '#96C567' },
+							3: { color: '#C3E79F' }
+							},
+						};
+
+				var chart = new google.visualization.PieChart(document.getElementById('chart_div_donut'));
+				chart.draw(data, options);
+			}
+
+			function loaded() {
+				document.getElementById('rendimentosTributaveis').focus();
+				document.getElementById('aliquotaPrevidenciaria').value = '0.12';
+				return true;
+			}
+
+			//Mostra a tabela com as alíquotas - no div correspondente
+			//A função inversa é a hideMe()
+			function showHelp() {
+				document.getElementById('floatingDiv').style.display = 'inline';
+				return true;
+			}
+
+			//Esconde a tabela com as alíquotas - no div correspondente - a partir de dois cliques dentro da área do div
+			//A função inversa é a showHelp()
+			function hideMe() {
+				document.getElementById('floatingDiv').style.display = 'none';
+				return true;
+			}
+
+			// Retorna uma array com:[salarioBruto, salarioLiquido, descontoPrevidenciario, alqPrev, impostoDevido]
+			function calc(rendTrib, rendNTrib, rendTribNPrev, alqPrev, inss, aplicarTetoInss, dependentes, descontosFacultativos) {
+				//declara as variáveis
+				var salarioBruto = 0;
+				var salarioLiquido = 0;
+				var descontoPrevidenciario = 0;
+				var impostoDevido = 0;
+
+				// atualiza o salário bruto
+				salarioBruto = (rendTrib * 1) + (rendNTrib * 1) + (rendTribNPrev * 1);
+
+				var chosenYear = document.getElementById('anoINSS').value;
+
+				// atualiza o valor da alíquota previdenciária caso seja INSS
+				if (inss)
+				{
+
+					if (rendTrib <= valoresINSS[chosenYear][0])
+						alqPrev = aliquotasINSS[0];
+					else if (rendTrib <= valoresINSS[chosenYear][1])
+						alqPrev = aliquotasINSS[1];
+					else
+						alqPrev = aliquotasINSS[2];
+
+					if (rendTrib > valoresINSS[chosenYear][2])
+						descontoPrevidenciario = Math.floor(valoresINSS[chosenYear][2] * alqPrev);
+					else
+						descontoPrevidenciario = Math.floor((rendTrib + 0.00001) * alqPrev);
+				}
+				else
+				{
+					alqPrev = alqPrev * 1;
+
+					if ((rendTrib > valoresINSS[chosenYear][2]) && (aplicarTetoInss)) {
+						descontoPrevidenciario = Math.floor(valoresINSS[chosenYear][2] * alqPrev);
+					}
+					else {
+						descontoPrevidenciario = Math.floor((rendTrib + 0.00001) * alqPrev);
+					}
+				}
+
+				// Base de cálculo para o imposto de renda
+				// Inclusive com o número de dependentes
+				var baseIRPF = (1*rendTrib) + (1*rendTribNPrev) - (1*descontoPrevidenciario) - (dependentes*18959);
+
+				// aliquota 1 - 0%
+				if (baseIRPF <= imposto[0])
+					impostoDevido = 0;
+				// aliquota 2 - 7.5%
+				else if (baseIRPF <= imposto[1])
+					impostoDevido = (baseIRPF * 0.075) - impostoDeduzir[1];
+				// aliquota 3 - 15%
+				else if (baseIRPF <= imposto[2])
+					impostoDevido = (baseIRPF * 0.15) - impostoDeduzir[2];
+				// aliquota 4 - 22.5%
+				else if (baseIRPF <= imposto[3])
+					impostoDevido = (baseIRPF * 0.225) - impostoDeduzir[3];
+				// aliquota 5 - 27,5%
+				else
+					impostoDevido = (baseIRPF * 0.275) - impostoDeduzir[4]
+				// Arredonda o imposto devido para baixo
+				impostoDevido = Math.floor(impostoDevido);
+
+				salarioLiquido = salarioBruto - impostoDevido - descontoPrevidenciario - descontosFacultativos;
+
+				var returnArray = [salarioBruto, salarioLiquido, descontoPrevidenciario, alqPrev, impostoDevido];
+				return returnArray;
+			}
+
+			function calcular() {
+				// substitui as vírgulas que o usuário usou por pontos
+				var rendTrib = document.getElementById('rendimentosTributaveis').value.replace(',', '.');
+				var rendNTrib = document.getElementById('rendimentosNaoTributaveis').value.replace(',', '.');
+				var rendTribNPrev = document.getElementById('rendimentosTributaveisNaoPrevidenciarios').value.replace(',', '.');
+				var descontosFacultativos = document.getElementById('descontosFacultativos').value.replace(',', '.');
+				var alqPrev = document.getElementById('aliquotaPrevidenciaria').value.replace(',', '.');
+				var inss = document.getElementById('aliquotaPrevidenciariaINSS').checked;
+				var aplicarTetoInss = document.getElementById('aplicarTetoInss').checked;
+				var numero_dependentes = document.getElementById('numeroDependentes').value;
+				if (numero_dependentes == '')
+				{
+					document.getElementById('numeroDependentes').value = '0';
+					numero_dependentes = 0;
+				}
+
+				var values = rendTrib.split('+');
+				rendTrib = 0;
+				for (i in values)
+					rendTrib += (values[i] * 1);
+				document.getElementById('rendimentosTributaveis').value = rendTrib;
+
+				// Na prática, cria uma int da floats
+				rendTrib = Math.floor((rendTrib*1 + 0.0001) * 100);
+				rendNTrib = Math.floor(rendNTrib * 100);
+				rendTribNPrev = Math.floor(rendTribNPrev * 100);
+				descontosFacultativos = Math.floor(descontosFacultativos * 100)
+
+				// Nada pode ser negativo
+				if ((rendTrib < 0) || (rendNTrib < 0) || (rendTribNPrev < 0) || (descontosFacultativos < 0)) {
+					return true;
+				}
+
+				// Array com os valores retornados
+				// a[0] -> salario bruto, a[1] -> salario líquido, a[2] -> desconto previdenciário, a[3] -> aliquota previdenciaria
+				// a[4] -> imposto devido
+				var a = calc(rendTrib, rendNTrib, rendTribNPrev, alqPrev, inss, aplicarTetoInss, numero_dependentes, descontosFacultativos);
+
+				// Avisa o usuário que a alíquota do INSS foi modificada
+				if (a[3] != alqPrev)
+				{
+					document.getElementById('aliquotaPrevidenciaria').value = a[3];
+					document.getElementById('aliquotaPrevidenciaria').style.color = 'red';
+					setTimeout("document.getElementById('aliquotaPrevidenciaria').style.color = 'black';", 500);
+					setTimeout("document.getElementById('aliquotaPrevidenciaria').style.color = 'red';", 1000);
+					setTimeout("document.getElementById('aliquotaPrevidenciaria').style.color = 'black';", 1500);
+				}
+
+				// forma as strings com a formatação visualmente interessante para o usuário
+				var str_descPrev = (a[2] / 100).toFixed(2).toString();
+				var str_descIRPF = (a[4] / 100).toFixed(2).toString();
+				var str_totalDescontos = ((a[2] + a[4] + descontosFacultativos) / 100).toFixed(2).toString();
+				var str_salarioLiquido = (a[1] / 100).toFixed(2).toString();
+				var str_salarioBruto = (a[0] / 100).toFixed(2).toString();
+
+				// atualiza a página com o resultado do cálculo
+				document.getElementById('descPrev').innerHTML = 'Previdência: ' + str_descPrev;
+				document.getElementById('descIRPF').innerHTML = 'IRPF: ' + str_descIRPF;
+				document.getElementById('totalDescontos').innerHTML = 'Total de descontos: ' + str_totalDescontos;
+				document.getElementById('salarioLiquido').innerHTML = 'Salário líquido: ' + str_salarioLiquido;
+				document.getElementById('salarioBruto').innerHTML = 'Salário bruto: ' + str_salarioBruto;
+
+				// atualiza o gráfico, caso exista conexão com a internet
+				var internet = typeof(google);
+				if (internet != "object")
+				{
+					document.getElementById('wrapper').style.display = 'none';
+					return true;
+				} else {
+					drawChart(a[1] / 100, a[4] / 100, a[2] / 100, descontosFacultativos / 100);
+					return true;
+				}
+			}
+
+			function calcularBrutoDumLiquido() {
+				var liquido = prompt("Qual salário líquido você quer?", "2500");
+
+				if (liquido == null)
+					return true
+
+				liquido *= 100;
+
+				if ((isNaN(liquido)) || (liquido < 0)) {
+					return true;
+				}
+
+				// Array com os valores retornados
+				// a[0] -> salario bruto etc...
+				var rendNTrib = document.getElementById('rendimentosNaoTributaveis').value.replace(',', '.');
+				var rendTribNPrev = document.getElementById('rendimentosTributaveisNaoPrevidenciarios').value.replace(',', '.');
+				var descontosFacultativos = document.getElementById('descontosFacultativos').value.replace(',', '.');
+				var alqPrev = document.getElementById('aliquotaPrevidenciaria').value.replace(',', '.');
+				var inss = document.getElementById('aliquotaPrevidenciariaINSS').checked;
+				var aplicarTetoInss = document.getElementById('aplicarTetoInss').checked;
+				var numero_dependentes = document.getElementById('numeroDependentes').value;
+				if (numero_dependentes == '')
+				{
+					document.getElementById('numeroDependentes').value = '0';
+					numero_dependentes = 0;
+				}
+
+				// Na prática, cria ints das floats
+				rendNTrib = Math.floor(rendNTrib * 100);
+				rendTribNPrev = Math.floor(rendTribNPrev * 100);
+				descontosFacultativos = Math.floor(descontosFacultativos * 100);
+
+				if (liquido < (rendNTrib + rendTribNPrev + descontosFacultativos)) {
+					document.getElementById('rendimentosTributaveis').value = 'Impossível';
+					return true
+				}
+
+				var rendTrib = liquido - rendNTrib + 1;
+
+				// Usar:
+				// var returnArray = [salarioBruto, salarioLiquido, descontoPrevidenciario, alqPrev, impostoDevido];
+				while(true) {
+					var a = calc(rendTrib, rendNTrib, rendTribNPrev, alqPrev, inss, aplicarTetoInss, numero_dependentes, descontosFacultativos);
+					if (a[1] == liquido) {
+						break;
+					}
+					rendTrib = rendTrib + (liquido - a[1]);
+				}
+				document.getElementById('rendimentosTributaveis').value = (rendTrib) / 100;
+
+				// Alerta visual ao usuário
+				document.getElementById('rendimentosTributaveis').style.color = 'red';
+				setTimeout("document.getElementById('rendimentosTributaveis').style.color = 'black';", 750);
+				setTimeout("document.getElementById('rendimentosTributaveis').style.color = 'red';", 1500);
+				setTimeout("document.getElementById('rendimentosTributaveis').style.color = 'black';", 2250);
+
+				calcular();
+
+				return true;
+			}
+
+			// Duas funções para alertar o usuário que ele pode clicar no texto e
+			// digitar um salário líquido desejado - o programa então calcula o salário bruto
+			// necessário para ter aquele líquido (não pode existir informação sobre descontos facultativos -> arrumar, quando der)
+			function alertUser() {
+				document.getElementById('userInfo').innerHTML = "Clique para escolher um salário líquido";
+				return true
+			}
+			function reverseAlertUser() {
+				document.getElementById('userInfo').innerHTML = "Rendimentos tributáveis";
+			}
+
+			// Mantém a integridade lógica das checkboxes
+			function checkCheckboxes(obj) {
+
+				if (obj.id == 'aplicarTetoInss')
+					document.getElementById('aliquotaPrevidenciariaINSS').checked = false;
+				else
+					document.getElementById('aplicarTetoInss').checked = false;
+
+				return true
+			}
+		</script>
+	</head>
+	<body onload="loaded();">
+		<div id="floatingDiv" ondblclick="hideMe();">
+			<p id="floatingP">
+				<span class="b">Alíquotas do INSS - 2017</span><br>
+				até 1.659,38: 8,00%<br>
+				de 1.659,39 até 2.765,66: 9,00%<br>
+				de 2.765,67 até 5.531,31: 11,00%<br><br>
+				<span class="b">Alíquotas do IRPF - Ano-calendário 2016 (= 2015)</span><br>
+				Até 1.903,98: isento<br>
+				De 1.903,99 até 2.826,65: 7,5% - 142,80 a deduzir<br>
+				De 2.826,66 até 3.751,05: 15,0% - 354,80<br>
+				De 3.751,06 até 4.664,68: 22,5% - 636,13<br>
+				Acima de 4.664,68: 27,5% - 869,36<br><br>
+				Desconto por dependente: R$ 189,59
+			</p>
+		</div>
+		<div id="aviso2017">2017</div>
+		<form onsubmit="calcular(); return false;">
+			<table>
+				<tr>
+					<td class="tdRight" id='userInfo' onmouseout="reverseAlertUser();" onmouseover="alertUser();" onclick="calcularBrutoDumLiquido();">Rendimentos tributáveis</td>
+					<td><input id="rendimentosTributaveis" type="text" size="15" /></td>
+				</tr>
+				<tr>
+					<td class="tdRight">Rendimentos isentos</td>
+					<td><input id="rendimentosNaoTributaveis" type="text" size="15" /></td>
+				</tr>
+				<tr>
+					<td class="tdRight">Rendimentos tributáveis não-previdenciários</td>
+					<td><input id="rendimentosTributaveisNaoPrevidenciarios" type="text" size="15" /></td>
+				</tr>
+				<tr>
+					<td class="tdRight">Descontos facultativos</td>
+					<td><input id="descontosFacultativos" type="text" size="15" /></td>
+				</tr>
+				<tr>
+					<td class="tdRight">Número de dependentes</td>
+					<td><input id="numeroDependentes" type="text" size="6" /></td>
+				</tr>
+				<tr>
+					<td class="tdRight">Alíquota previdenciária</td>
+					<td><input id="aliquotaPrevidenciaria" type="text" size="6" /></td>
+				</tr>
+				<tr>
+					<td class="tdRight">INSS</td>
+					<td style="text-align: left;"><input id="aliquotaPrevidenciariaINSS" type="checkbox" onchange="checkCheckboxes(this);" />
+						<select id="anoINSS" >
+							<option value="2017">2017</option>
+							<option value="2016">2016</option>
+							<option value="2015">2015</option>
+						</select>
+					</td>
+					</td>
+				</tr>
+				<tr>
+					<td class="tdRight">Aplicar teto do INSS</td>
+					<td style="text-align: left;"><input id="aplicarTetoInss" type="checkbox" onchange="checkCheckboxes(this);" />
+				</tr>
+
+				<tr>
+					<td></td>
+					<td class="tdRight"><input type="submit" value="Calcular" /></td>
+				</tr>
+			</table>
+		</form>
+
+		<div id="question" onclick="showHelp();">?</div>
+		<div id="wrapper">
+			<div id="left_info">
+				<p class="res" id="descPrev" />
+				<p class="res" id="descIRPF" />
+				<p class="res" id="totalDescontos" />
+				<p class="res" id="salarioLiquido" />
+				<p class="res" id="salarioBruto" />
+			</div>
+			<div id="chart_div_donut"></div>
+		</div>
+	</body>
+</html>
